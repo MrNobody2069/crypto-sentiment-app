@@ -1,6 +1,8 @@
 import streamlit as st
 import requests
 from textblob import TextBlob
+import pandas as pd
+import altair as alt
 
 st.set_page_config(page_title="Crypto Sentiment App", layout="centered")
 
@@ -12,32 +14,68 @@ coin = st.text_input("🔍 Enter a crypto keyword (e.g. Bitcoin, Ethereum):")
 
 # --- Fetch News ---
 def fetch_news(coin_name):
-    api_key = "e8fe6d02a2884a3a9f7a89f2a12483ab"  # Replace this with your actual API key
+    api_key = "e8fe6d02a2884a3a9f7a89f2a12483ab"  # Replace with your NewsAPI key
     url = (
         f"https://newsapi.org/v2/everything?q={coin_name}&language=en&sortBy=publishedAt&pageSize=5&apiKey={api_key}"
     )
     response = requests.get(url)
     data = response.json()
-    return data["articles"]
+    return data.get("articles", [])
 
 # --- Sentiment Analysis ---
 def get_sentiment(text):
     blob = TextBlob(text)
     return blob.sentiment.polarity  # -1 (negative) to 1 (positive)
 
+def classify_sentiment(score):
+    if score > 0.3:
+        return "🟢 Strong Positive"
+    elif score > 0.05:
+        return "🟡 Mild Positive"
+    elif score < -0.3:
+        return "🔴 Strong Negative"
+    elif score < -0.05:
+        return "🔴 Mild Negative"
+    else:
+        return "⚪️ Neutral"
+
 # --- Display Results ---
 if coin:
     try:
         articles = fetch_news(coin)
-        for article in articles:
-            st.markdown(f"### {article['title']}")
-            description = article["description"] or ""
-            score = get_sentiment(description)
-            sentiment = (
-                "🟢 Positive" if score > 0 else "🔴 Negative" if score < 0 else "🟡 Neutral"
-            )
-            st.write("**Sentiment:**", sentiment)
-            st.caption(article["publishedAt"])
-            st.write("---")
+        if not articles:
+            st.warning("No news articles found. Try a different keyword.")
+        else:
+            sentiment_data = []
+
+            for article in articles:
+                title = article.get('title', 'No Title')
+                description = article.get("description") or ""
+                score = get_sentiment(description)
+                sentiment_label = classify_sentiment(score)
+
+                st.markdown(f"### {title}")
+                st.write("**Sentiment Score:**", f"{score:.2f}")
+                st.write("**Sentiment:**", sentiment_label)
+                st.caption(article.get("publishedAt", ""))
+                st.write("---")
+
+                sentiment_data.append({
+                    "Title": title[:60] + ("..." if len(title) > 60 else ""),
+                    "Score": score
+                })
+
+            # Show Bar Chart
+            df = pd.DataFrame(sentiment_data)
+            st.subheader("📊 Sentiment Score Comparison")
+            chart = alt.Chart(df).mark_bar().encode(
+                x=alt.X('Score:Q', scale=alt.Scale(domain=[-1, 1])),
+                y=alt.Y('Title:N', sort='-x'),
+                color=alt.condition(
+                    alt.datum.Score > 0, alt.value("green"), alt.value("red")
+                )
+            ).properties(height=300)
+            st.altair_chart(chart, use_container_width=True)
+
     except Exception as e:
-        st.error("Something went wrong. Please check your API key or connection.")
+        st.error("Something went wrong. Please check your API key or internet connection.")
