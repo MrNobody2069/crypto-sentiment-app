@@ -4,6 +4,8 @@ from textblob import TextBlob
 import pandas as pd
 import altair as alt
 from datetime import datetime
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 
 st.set_page_config(page_title="🚀 Crypto Sentiment Dashboard", layout="centered")
 
@@ -12,6 +14,17 @@ st.write("Analyze real-time news sentiment, view price, and detect trading signa
 
 # --- Input ---
 coin = st.text_input("🔍 Enter a crypto keyword (e.g. Bitcoin, Ethereum):")
+
+# --- Google Sheets Auth ---
+def connect_to_sheet():
+    try:
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        creds = ServiceAccountCredentials.from_json_keyfile_name("gspread_creds.json", scope)
+        client = gspread.authorize(creds)
+        sheet = client.open("CryptoSentimentLog").sheet1
+        return sheet
+    except:
+        return None
 
 # --- Fetch News ---
 def fetch_news(coin_name):
@@ -49,6 +62,8 @@ if coin:
         articles = fetch_news(coin)
         sentiments = []
 
+        sheet = connect_to_sheet()
+
         for article in articles:
             title = article['title']
             description = article['description'] or ""
@@ -57,6 +72,7 @@ if coin:
                 "🟢 Positive" if score > 0.2 else "🔴 Negative" if score < -0.2 else "🟡 Neutral"
             )
             date_str = article["publishedAt"][:10]
+
             sentiments.append({
                 "title": title,
                 "score": score,
@@ -69,6 +85,10 @@ if coin:
             st.write("**Score:**", f"{score:.2f}")
             st.caption(f"🗓 {date_str}")
             st.write("---")
+
+            # Log to Google Sheets if connected
+            if sheet:
+                sheet.append_row([datetime.now().strftime("%Y-%m-%d %H:%M:%S"), coin, title, score, sentiment_label])
 
         # --- Summary ---
         df = pd.DataFrame(sentiments)
