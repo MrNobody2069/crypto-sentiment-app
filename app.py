@@ -1,33 +1,43 @@
 import streamlit as st
-import snscrape.modules.twitter as sntwitter
-import pandas as pd
-from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
-import matplotlib.pyplot as plt
+import requests
+from textblob import TextBlob
 
-st.set_page_config(page_title="Crypto Sentiment Analyzer", layout="centered")
-st.title("📊 Crypto Sentiment Analyzer")
-st.markdown("Enter a keyword (like `Bitcoin`, `ETH`, `Solana`) to see recent Twitter sentiment.")
+st.set_page_config(page_title="Crypto Sentiment App", layout="centered")
 
-query = st.text_input("Search Term", value="Bitcoin")
-tweet_count = st.slider("Number of Tweets", 10, 100, 50)
+st.title("🧠 Crypto Sentiment Analyzer")
+st.write("Analyze real-time news sentiment for any cryptocurrency.")
 
-if st.button("Analyze Sentiment") and query:
-    analyzer = SentimentIntensityAnalyzer()
-    tweets_data = []
+# --- Input ---
+coin = st.text_input("🔍 Enter a crypto keyword (e.g. Bitcoin, Ethereum):")
 
-    for i, tweet in enumerate(sntwitter.TwitterSearchScraper(query + ' lang:en').get_items()):
-        if i >= tweet_count:
-            break
-        score = analyzer.polarity_scores(tweet.content)['compound']
-        sentiment = 'Positive' if score > 0.2 else 'Negative' if score < -0.2 else 'Neutral'
-        tweets_data.append([tweet.date, tweet.user.username, tweet.content, sentiment])
+# --- Fetch News ---
+def fetch_news(coin_name):
+    api_key = "e8fe6d02a2884a3a9f7a89f2a12483ab"  # Replace this with your actual API key
+    url = (
+        f"https://newsapi.org/v2/everything?q={coin_name}&language=en&sortBy=publishedAt&pageSize=5&apiKey={api_key}"
+    )
+    response = requests.get(url)
+    data = response.json()
+    return data["articles"]
 
-    df = pd.DataFrame(tweets_data, columns=["Date", "User", "Tweet", "Sentiment"])
-    st.write("### Sentiment Breakdown")
-    st.dataframe(df)
+# --- Sentiment Analysis ---
+def get_sentiment(text):
+    blob = TextBlob(text)
+    return blob.sentiment.polarity  # -1 (negative) to 1 (positive)
 
-    sentiment_counts = df['Sentiment'].value_counts()
-    fig, ax = plt.subplots()
-    sentiment_counts.plot.pie(autopct='%1.1f%%', ax=ax)
-    ax.set_ylabel('')
-    st.pyplot(fig)
+# --- Display Results ---
+if coin:
+    try:
+        articles = fetch_news(coin)
+        for article in articles:
+            st.markdown(f"### {article['title']}")
+            description = article["description"] or ""
+            score = get_sentiment(description)
+            sentiment = (
+                "🟢 Positive" if score > 0 else "🔴 Negative" if score < 0 else "🟡 Neutral"
+            )
+            st.write("**Sentiment:**", sentiment)
+            st.caption(article["publishedAt"])
+            st.write("---")
+    except Exception as e:
+        st.error("Something went wrong. Please check your API key or connection.")

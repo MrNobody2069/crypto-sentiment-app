@@ -1,5 +1,3 @@
 streamlit
-pandas
-matplotlib
-vaderSentiment
-snscrape
+textblob
+requests
